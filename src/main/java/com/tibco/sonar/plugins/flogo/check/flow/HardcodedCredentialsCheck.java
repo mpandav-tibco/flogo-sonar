@@ -26,13 +26,20 @@ public class HardcodedCredentialsCheck extends AbstractFlowCheck {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private void checkMap(Map<String, Object> map, FlogoTask task, FlogoFlow flow, FlogoApp app, String context) {
         if (map == null)
             return;
         for (var entry : map.entrySet()) {
+            if (entry.getValue() instanceof Map) {
+                checkMap((Map<String, Object>) entry.getValue(), task, flow, app, context);
+                continue;
+            }
             if (CREDENTIAL_KEYS.matcher(entry.getKey()).find()) {
                 if (entry.getValue() instanceof String val) {
-                    if (!val.isEmpty() && !val.startsWith("=$property") && !val.startsWith("=$.")
+                    if (!val.isEmpty() && !val.startsWith("=")
+                            && !val.startsWith("$property[")
+                            && !val.startsWith("$env[")
                             && !val.startsWith("SECRET:")) {
                         addIssue(
                                 "Task '" + task.getId() + "' in flow '" + flow.getName()

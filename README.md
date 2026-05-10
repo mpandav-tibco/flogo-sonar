@@ -4,8 +4,8 @@ A SonarQube plugin that provides static code analysis for **TIBCO Flogo** applic
 
 ## Features
 
-- **65 built-in rules** covering security, reliability, and maintainability
-- **Code coverage** support via Flogo test files (`.flogotest`)
+- **68 built-in rules** covering security, reliability, maintainability, and test quality
+- **Assertion-aware code coverage** via Flogo test files (`.flogotest`)
 - **Custom metrics** — flows, activities, triggers, connections, properties, handlers
 - Ships with a default **Flogo Way** quality profile with all rules enabled
 - Works with SonarQube Community Edition 26.x+
@@ -92,7 +92,7 @@ cp target/sonar-flogo-plugin-1.0.0.jar /path/to/sonarqube/extensions/plugins/
 
 ## Code Coverage
 
-The plugin calculates coverage from Flogo test files (`.flogotest`). Each task/activity in a flow is a coverable line. Flows that have test cases defined in the matching `.flogotest` file are marked as covered.
+The plugin calculates **assertion-aware coverage** from Flogo test files (`.flogotest`). Each task/activity in a flow maps to a coverable line. A flow is only marked as covered if it has a test case **with at least one assertion** — tests that merely execute a flow without validating outputs do not count toward coverage.
 
 Test files are auto-detected alongside `.flogo` files (e.g., `my-app.flogo` → `my-app.flogotest`).
 
@@ -151,6 +151,14 @@ add-assertion      → adds assertions to a test case
 | MAJOR | `FlowMissingReturn` | Flow should end with a Return activity |
 | MAJOR | `MultipleTransitionsNoCondition` | Multiple outgoing transitions should have conditions |
 
+### Test Quality (3 rules)
+
+| Severity | Rule | Description |
+|----------|------|-------------|
+| MAJOR | `FlowNoTestCase` | Flow has no test case defined in the .flogotest file |
+| MAJOR | `TestCaseNoAssertion` | Test case has no assertions to validate flow outputs |
+| MINOR | `TestCaseEmptyInput` | Test case has empty or no input data |
+
 ### Maintainability (30 rules)
 
 | Severity | Rule | Description |
@@ -203,6 +211,3 @@ add-assertion      → adds assertions to a test case
 - **Gson** 2.10.1
 - **Maven** with sonar-packaging-maven-plugin
 
-## License
-
-Proprietary — TIBCO Software Inc.

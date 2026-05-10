@@ -150,36 +150,49 @@ public class FlogoParser {
         return false;
     }
 
+    // --- Line index cache: avoids repeated content.split("\n") calls ---
+    private static String cachedContentRef;
+    private static String[] cachedLines;
+
+    private static String[] getLines(String content) {
+        if (content != cachedContentRef) {
+            cachedContentRef = content;
+            cachedLines = content.split("\n");
+        }
+        return cachedLines;
+    }
+
     /**
      * Find the 1-based line number in raw content where a search term first
-     * appears.
+     * appears. Returns 0 if not found.
      */
     public static int findLineNumber(String content, String searchTerm) {
         if (content == null || searchTerm == null)
-            return 1;
-        String[] lines = content.split("\n");
+            return 0;
+        String[] lines = getLines(content);
         for (int i = 0; i < lines.length; i++) {
             if (lines[i].contains(searchTerm)) {
                 return i + 1;
             }
         }
-        return 1;
+        return 0;
     }
 
     /**
      * Find line number for a named element (flow, task, trigger, etc.)
+     * Returns 0 if not found.
      */
     public static int findElementLine(String content, String elementName) {
         // Try exact JSON field match first
         int line = findLineNumber(content, "\"name\": \"" + elementName + "\"");
-        if (line > 1)
+        if (line > 0)
             return line;
         line = findLineNumber(content, "\"name\":\"" + elementName + "\"");
-        if (line > 1)
+        if (line > 0)
             return line;
         // Try id field
         line = findLineNumber(content, "\"id\": \"" + elementName + "\"");
-        if (line > 1)
+        if (line > 0)
             return line;
         return findLineNumber(content, "\"id\":\"" + elementName + "\"");
     }

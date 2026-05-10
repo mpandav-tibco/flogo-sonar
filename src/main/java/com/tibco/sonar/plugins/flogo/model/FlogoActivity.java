@@ -94,19 +94,4 @@ public class FlogoActivity {
         return ref != null && ref.toLowerCase().contains("sendmail");
     }
 
-    public boolean isErrorRef() {
-        return ref != null && (ref.contains("error") || ref.contains("throw"));
-    }
-
-    public boolean isGrpcRef() {
-        return ref != null && ref.toLowerCase().contains("grpc");
-    }
-
-    public boolean isMapperRef() {
-        return ref != null && ref.toLowerCase().contains("mapper");
-    }
-
-    public boolean isReplyRef() {
-        return ref != null && (ref.contains("actreply") || ref.contains("reply") || ref.contains("httpresponse"));
-    }
 }

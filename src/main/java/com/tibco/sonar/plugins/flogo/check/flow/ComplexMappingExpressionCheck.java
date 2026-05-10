@@ -20,9 +20,11 @@ public class ComplexMappingExpressionCheck extends AbstractFlowCheck {
             if (task.getActivity() == null)
                 continue;
             checkMapValues(task.getActivity().getInput(), task, flow, app);
+            checkMapValues(task.getActivity().getSettings(), task, flow, app);
         }
     }
 
+    @SuppressWarnings("unchecked")
     private void checkMapValues(Map<String, Object> map, FlogoTask task, FlogoFlow flow, FlogoApp app) {
         if (map == null)
             return;
@@ -35,6 +37,8 @@ public class ComplexMappingExpressionCheck extends AbstractFlowCheck {
                                     + entry.getKey() + "'. Consider using a subflow or intermediate variables.",
                             taskLine(app, task.getId()));
                 }
+            } else if (entry.getValue() instanceof Map) {
+                checkMapValues((Map<String, Object>) entry.getValue(), task, flow, app);
             }
         }
     }

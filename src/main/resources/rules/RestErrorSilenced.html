@@ -1,0 +1,1 @@
+<p>REST activities with throwError=false and no status code checking silently ignore HTTP errors (4xx/5xx). This can lead to data corruption, missed failures, and difficult-to-diagnose production issues. Either enable throwError, configure response codes handling, or add conditional transitions checking statusCode.</p>

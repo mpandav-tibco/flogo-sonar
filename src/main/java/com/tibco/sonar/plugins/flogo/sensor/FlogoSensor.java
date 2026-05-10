@@ -55,13 +55,17 @@ public class FlogoSensor implements Sensor {
         String content = inputFile.contents();
         FlogoApp app = FlogoParser.parse(content);
 
+        // Load test metadata into app model for test quality checks
+        loadTestMetadata(inputFile, app);
+
         // Save metrics (including NCLOC and coverage)
         saveMetrics(context, inputFile, app, content);
 
-        // Run all checks
-        for (Class<? extends AbstractFlogoCheck> checkClass : FlogoRuleDefinition.getCheckClasses()) {
+        // Run all checks (pre-instantiated to avoid per-file reflection)
+        List<AbstractFlogoCheck> checks = createChecks();
+        for (AbstractFlogoCheck check : checks) {
             try {
-                AbstractFlogoCheck check = checkClass.getDeclaredConstructor().newInstance();
+                check.clearIssues();
                 check.validate(app);
 
                 String ruleKey = check.getRuleKey();
@@ -69,9 +73,21 @@ public class FlogoSensor implements Sensor {
                     saveIssue(context, inputFile, ruleKey, issue);
                 }
             } catch (Exception e) {
-                LOG.warn("Error running check " + checkClass.getSimpleName() + ": " + e.getMessage());
+                LOG.warn("Error running check " + check.getClass().getSimpleName() + ": " + e.getMessage());
             }
         }
+    }
+
+    private static List<AbstractFlogoCheck> createChecks() {
+        List<AbstractFlogoCheck> checks = new ArrayList<>();
+        for (Class<? extends AbstractFlogoCheck> checkClass : FlogoRuleDefinition.getCheckClasses()) {
+            try {
+                checks.add(checkClass.getDeclaredConstructor().newInstance());
+            } catch (Exception e) {
+                LOG.warn("Could not instantiate check " + checkClass.getSimpleName() + ": " + e.getMessage());
+            }
+        }
+        return checks;
     }
 
     private void saveIssue(SensorContext context, InputFile inputFile, String ruleKey,
@@ -92,6 +108,83 @@ public class FlogoSensor implements Sensor {
                 .message(issue.getMessage());
 
         newIssue.at(location).save();
+    }
+
+    /**
+     * Load .flogotest metadata into the FlogoApp model so test quality checks
+     * can inspect test cases, assertions, inputs, and suites.
+     */
+    @SuppressWarnings("unchecked")
+    private void loadTestMetadata(InputFile inputFile, FlogoApp app) {
+        try {
+            String flogoPath = inputFile.uri().getPath();
+            String testPath = flogoPath.replace(".flogo", ".flogotest");
+            File testFile = new File(testPath);
+            if (!testFile.exists())
+                return;
+
+            String testContent = new String(Files.readAllBytes(testFile.toPath()));
+            JsonObject testJson = JsonParser.parseString(testContent).getAsJsonObject();
+
+            // Parse test cases
+            Map<String, Map<String, Object>> testCases = new LinkedHashMap<>();
+            if (testJson.has("tests")) {
+                JsonObject tests = testJson.getAsJsonObject("tests");
+                for (Map.Entry<String, JsonElement> entry : tests.entrySet()) {
+                    JsonObject tc = entry.getValue().getAsJsonObject();
+                    Map<String, Object> tcMap = new LinkedHashMap<>();
+                    tcMap.put("key", entry.getKey());
+                    tcMap.put("name", tc.has("name") ? tc.get("name").getAsString() : entry.getKey());
+                    tcMap.put("flowId", tc.has("flowId") ? tc.get("flowId").getAsString() : "");
+                    tcMap.put("flowName", tc.has("flowName") ? tc.get("flowName").getAsString() : "");
+                    tcMap.put("description", tc.has("description") ? tc.get("description").getAsString() : "");
+
+                    // Count assertions
+                    int assertionCount = 0;
+                    if (tc.has("flowOutputs")) {
+                        JsonObject outputs = tc.getAsJsonObject("flowOutputs");
+                        if (outputs.has("assertions")) {
+                            assertionCount = outputs.getAsJsonObject("assertions").size();
+                        }
+                    }
+                    tcMap.put("assertionCount", assertionCount);
+
+                    // Check input quality
+                    boolean hasInputs = false;
+                    if (tc.has("flowInputs")) {
+                        hasInputs = hasNonEmptyValues(tc.getAsJsonObject("flowInputs"));
+                    }
+                    tcMap.put("hasInputs", hasInputs);
+
+                    testCases.put(entry.getKey(), tcMap);
+                }
+            }
+            app.setTestCases(testCases);
+
+            // Parse suites
+            Map<String, Map<String, Object>> suites = new LinkedHashMap<>();
+            if (testJson.has("suites")) {
+                JsonObject suitesJson = testJson.getAsJsonObject("suites");
+                for (Map.Entry<String, JsonElement> entry : suitesJson.entrySet()) {
+                    JsonObject suite = entry.getValue().getAsJsonObject();
+                    Map<String, Object> suiteMap = new LinkedHashMap<>();
+                    suiteMap.put("name", suite.has("name") ? suite.get("name").getAsString() : entry.getKey());
+                    suiteMap.put("disabled", suite.has("disabled") && suite.get("disabled").getAsBoolean());
+
+                    List<String> testRefs = new ArrayList<>();
+                    if (suite.has("tests")) {
+                        for (JsonElement ref : suite.getAsJsonArray("tests")) {
+                            testRefs.add(ref.getAsString());
+                        }
+                    }
+                    suiteMap.put("tests", testRefs);
+                    suites.put(entry.getKey(), suiteMap);
+                }
+            }
+            app.setTestSuites(suites);
+        } catch (Exception e) {
+            LOG.debug("Could not load test metadata for {}: {}", inputFile.filename(), e.getMessage());
+        }
     }
 
     private void saveMetrics(SensorContext context, InputFile inputFile, FlogoApp app, String content) {
@@ -134,7 +227,7 @@ public class FlogoSensor implements Sensor {
         context.<Integer>newMeasure()
                 .forMetric(FlogoMetrics.FLOGO_CONNECTIONS)
                 .on(inputFile)
-                .withValue(app.getConnections().size())
+                .withValue(app.getConnections() != null ? app.getConnections().size() : 0)
                 .save();
 
         context.<Integer>newMeasure()
@@ -200,16 +293,20 @@ public class FlogoSensor implements Sensor {
             return;
         }
 
-        // Find tested flows from .flogotest file
-        Set<String> testedFlowIds = findTestedFlows(inputFile);
+        // Find tested flows from already-loaded test metadata (avoids re-parsing
+        // .flogotest)
+        Map<String, TestQuality> testedFlows = buildTestedFlowsFromMetadata(app);
 
-        // Calculate covered lines
+        // Calculate covered lines — only full coverage for tests with assertions
         Set<Integer> coveredLines = new LinkedHashSet<>();
         for (Map.Entry<String, Set<Integer>> entry : flowTaskLines.entrySet()) {
             String flowId = entry.getKey();
-            if (testedFlowIds.contains(flowId)) {
+            TestQuality quality = testedFlows.get(flowId);
+            if (quality != null && quality.hasAssertions) {
+                // Full coverage: test case with assertions
                 coveredLines.addAll(entry.getValue());
             }
+            // Test cases without assertions don't count as covered
         }
 
         // Report coverage using NewCoverage API
@@ -222,46 +319,96 @@ public class FlogoSensor implements Sensor {
 
         int linesToCover = allCoverableLines.size();
         int uncoveredCount = linesToCover - coveredLines.size();
-        LOG.info("Coverage for {}: {} lines to cover, {} uncovered, {} tested flows",
-                inputFile.filename(), linesToCover, uncoveredCount, testedFlowIds.size());
+        LOG.info("Coverage for {}: {} lines to cover, {} uncovered, {} tested flows ({} with assertions)",
+                inputFile.filename(), linesToCover, uncoveredCount,
+                testedFlows.size(), testedFlows.values().stream().filter(q -> q.hasAssertions).count());
+    }
+
+    /** Quality metadata for a test case */
+    private static class TestQuality {
+        final String flowId;
+        final String testName;
+        final boolean hasAssertions;
+        final boolean hasInputs;
+        final boolean inSuite;
+
+        TestQuality(String flowId, String testName, boolean hasAssertions, boolean hasInputs, boolean inSuite) {
+            this.flowId = flowId;
+            this.testName = testName;
+            this.hasAssertions = hasAssertions;
+            this.hasInputs = hasInputs;
+            this.inSuite = inSuite;
+        }
     }
 
     /**
-     * Parse the .flogotest file to find which flows have test cases.
-     * Returns a set of flow IDs (e.g., "flow:my_flow") that are covered by tests.
+     * Build tested flows map from the already-loaded test metadata in the app
+     * model.
+     * This avoids re-parsing the .flogotest file.
      */
-    @SuppressWarnings("unchecked")
-    private Set<String> findTestedFlows(InputFile inputFile) {
-        Set<String> testedFlowIds = new HashSet<>();
-        try {
-            // Look for .flogotest file alongside the .flogo file
-            String flogoPath = inputFile.uri().getPath();
-            String testPath = flogoPath.replace(".flogo", ".flogotest");
-            File testFile = new File(testPath);
+    private Map<String, TestQuality> buildTestedFlowsFromMetadata(FlogoApp app) {
+        Map<String, TestQuality> result = new LinkedHashMap<>();
 
-            if (!testFile.exists()) {
-                LOG.debug("No test file found at: {}", testPath);
-                return testedFlowIds;
-            }
-
-            String testContent = new String(Files.readAllBytes(testFile.toPath()));
-            JsonObject testJson = JsonParser.parseString(testContent).getAsJsonObject();
-
-            // Parse "tests" section: keys are "flowName:testCaseName", each has "flowId"
-            if (testJson.has("tests")) {
-                JsonObject tests = testJson.getAsJsonObject("tests");
-                for (Map.Entry<String, JsonElement> entry : tests.entrySet()) {
-                    JsonObject testCase = entry.getValue().getAsJsonObject();
-                    if (testCase.has("flowId")) {
-                        testedFlowIds.add(testCase.get("flowId").getAsString());
+        // Collect test case keys that are in a non-disabled suite
+        Set<String> testsInSuites = new HashSet<>();
+        for (Map<String, Object> suite : app.getTestSuites().values()) {
+            boolean disabled = Boolean.TRUE.equals(suite.get("disabled"));
+            if (!disabled) {
+                Object tests = suite.get("tests");
+                if (tests instanceof List) {
+                    for (Object ref : (List<?>) tests) {
+                        testsInSuites.add(ref.toString());
                     }
                 }
             }
-
-            LOG.info("Found {} tested flows in {}", testedFlowIds.size(), testFile.getName());
-        } catch (Exception e) {
-            LOG.warn("Error reading test file for {}: {}", inputFile.filename(), e.getMessage());
         }
-        return testedFlowIds;
+
+        for (Map.Entry<String, Map<String, Object>> entry : app.getTestCases().entrySet()) {
+            String testKey = entry.getKey();
+            Map<String, Object> tc = entry.getValue();
+
+            String flowId = (String) tc.getOrDefault("flowId", "");
+            if (flowId.isEmpty())
+                continue;
+
+            String testName = (String) tc.getOrDefault("name", testKey);
+            int assertionCount = (int) tc.getOrDefault("assertionCount", 0);
+            boolean hasInputs = Boolean.TRUE.equals(tc.get("hasInputs"));
+            boolean inSuite = testsInSuites.contains(testKey);
+
+            TestQuality current = new TestQuality(flowId, testName, assertionCount > 0, hasInputs, inSuite);
+            TestQuality existing = result.get(flowId);
+            if (existing == null || betterQuality(current, existing)) {
+                result.put(flowId, current);
+            }
+        }
+
+        return result;
+    }
+
+    /** Check if a JSON object has any non-empty, non-null, non-trivial values */
+    private boolean hasNonEmptyValues(JsonObject obj) {
+        for (Map.Entry<String, JsonElement> entry : obj.entrySet()) {
+            JsonElement val = entry.getValue();
+            if (val.isJsonNull())
+                continue;
+            if (val.isJsonPrimitive() && val.getAsString().isEmpty())
+                continue;
+            if (val.isJsonObject() && val.getAsJsonObject().size() == 0)
+                continue;
+            if (val.isJsonArray() && val.getAsJsonArray().size() == 0)
+                continue;
+            return true;
+        }
+        return false;
+    }
+
+    /** Compare test quality — assertions > inputs > suite membership */
+    private boolean betterQuality(TestQuality a, TestQuality b) {
+        if (a.hasAssertions != b.hasAssertions)
+            return a.hasAssertions;
+        if (a.hasInputs != b.hasInputs)
+            return a.hasInputs;
+        return a.inSuite && !b.inSuite;
     }
 }

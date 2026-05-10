@@ -10,6 +10,8 @@ import org.sonar.check.Priority;
 public class ConnectionNoTLSCheck extends AbstractAppCheck {
     @Override
     protected void validateApp(FlogoApp app) {
+        if (app.getConnections() == null)
+            return;
         for (var entry : app.getConnections().entrySet()) {
             FlogoConnection conn = entry.getValue();
             boolean useTLS = conn.getSettingAsBoolean("useTLS");

@@ -18,7 +18,6 @@ public class UnusedConnectionCheck extends AbstractAppCheck {
             String connId = entry.getKey();
             String connRef = "conn://" + connId;
             // Check if any activity references this connection
-            boolean used = raw.indexOf(connRef) != raw.lastIndexOf(connRef) || countOccurrences(raw, connRef) > 1;
             if (countOccurrences(raw, connRef) <= 1) {
                 // Only defined once (in the connections block itself), never referenced
                 addIssue(
@@ -27,15 +26,5 @@ public class UnusedConnectionCheck extends AbstractAppCheck {
                         FlogoParser.findLineNumber(raw, "\"" + connId + "\""));
             }
         }
-    }
-
-    private int countOccurrences(String text, String search) {
-        int count = 0;
-        int idx = 0;
-        while ((idx = text.indexOf(search, idx)) != -1) {
-            count++;
-            idx += search.length();
-        }
-        return count;
     }
 }

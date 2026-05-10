@@ -79,11 +79,4 @@ public class FlogoTrigger {
         return ref != null && ref.toLowerCase().contains("graphql");
     }
 
-    public boolean isTimerTrigger() {
-        return ref != null && ref.toLowerCase().contains("timer");
-    }
-
-    public boolean isLambdaTrigger() {
-        return ref != null && ref.toLowerCase().contains("lambda");
-    }
 }

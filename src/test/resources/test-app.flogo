@@ -1,0 +1,172 @@
+{
+    "name": "TestApp",
+    "type": "flogo:app",
+    "version": "1.0.0",
+    "description": "",
+    "appModel": "1.1.1",
+    "imports": [
+        "github.com/project-flogo/contrib/activity/rest",
+        "github.com/project-flogo/contrib/activity/log",
+        "github.com/project-flogo/flow/activity/subflow"
+    ],
+    "triggers": [
+        {
+            "ref": "#rest",
+            "name": "MyRestTrigger",
+            "id": "MyRestTrigger",
+            "settings": {
+                "port": "9999"
+            },
+            "handlers": [
+                {
+                    "settings": {
+                        "Method": "GET",
+                        "Path": "/api/orders"
+                    },
+                    "action": {
+                        "ref": "github.com/project-flogo/flow",
+                        "settings": {
+                            "flowURI": "res://flow:get_orders"
+                        }
+                    }
+                },
+                {
+                    "settings": {
+                        "Method": "POST",
+                        "Path": "/api/orders"
+                    },
+                    "action": {
+                        "ref": "github.com/project-flogo/flow",
+                        "settings": {
+                            "flowURI": "res://flow:create_order"
+                        }
+                    }
+                }
+            ]
+        }
+    ],
+    "resources": [
+        {
+            "id": "flow:get_orders",
+            "compressed": false,
+            "data": {
+                "name": "get_orders",
+                "description": "Fetches orders from the database",
+                "tasks": [
+                    {
+                        "id": "Start",
+                        "name": "Start",
+                        "activity": {
+                            "ref": "#noop"
+                        }
+                    },
+                    {
+                        "id": "REST_1",
+                        "name": "REST_1",
+                        "description": "Call backend",
+                        "activity": {
+                            "ref": "#rest",
+                            "input": {
+                                "uri": "http://example.com/api",
+                                "method": "GET"
+                            },
+                            "settings": {
+                                "timeout": 30
+                            }
+                        }
+                    },
+                    {
+                        "id": "Log_1",
+                        "name": "Log_1",
+                        "activity": {
+                            "ref": "#log",
+                            "input": {
+                                "message": "=string.concat(\"Got response: \", $activity[REST_1].output.data)"
+                            }
+                        }
+                    },
+                    {
+                        "id": "Return",
+                        "name": "Return",
+                        "activity": {
+                            "ref": "#actreturn",
+                            "input": {
+                                "code": 200,
+                                "data": "=$activity[REST_1].output.data"
+                            }
+                        }
+                    }
+                ],
+                "links": [
+                    {
+                        "id": 1,
+                        "from": "Start",
+                        "to": "REST_1",
+                        "type": "default"
+                    },
+                    {
+                        "id": 2,
+                        "from": "REST_1",
+                        "to": "Log_1",
+                        "type": "default"
+                    },
+                    {
+                        "id": 3,
+                        "from": "Log_1",
+                        "to": "Return",
+                        "type": "default"
+                    }
+                ]
+            }
+        },
+        {
+            "id": "flow:create_order",
+            "compressed": false,
+            "data": {
+                "name": "CreateOrder",
+                "tasks": [
+                    {
+                        "id": "Start",
+                        "name": "Start",
+                        "activity": {
+                            "ref": "#noop"
+                        }
+                    },
+                    {
+                        "id": "REST_2",
+                        "name": "REST_2",
+                        "activity": {
+                            "ref": "#rest",
+                            "input": {
+                                "uri": "http://backend:8080/orders",
+                                "method": "POST",
+                                "password": "admin123"
+                            }
+                        }
+                    }
+                ],
+                "links": [
+                    {
+                        "id": 1,
+                        "from": "Start",
+                        "to": "REST_2",
+                        "type": "default"
+                    }
+                ]
+            }
+        }
+    ],
+    "properties": [
+        {
+            "name": "DB_HOST",
+            "type": "string",
+            "value": "localhost"
+        },
+        {
+            "name": "api_password",
+            "type": "string",
+            "value": "s3cret"
+        }
+    ],
+    "connections": {}
+}

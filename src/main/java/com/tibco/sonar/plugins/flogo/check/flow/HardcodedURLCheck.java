@@ -56,8 +56,8 @@ public class HardcodedURLCheck extends AbstractFlowCheck {
     private boolean isHardcodedURL(String value) {
         if (value == null)
             return false;
-        // Skip if using property reference
-        if (value.startsWith("=$property") || value.startsWith("=$."))
+        // Skip expression mappings (any value starting with '=' is a Flogo expression)
+        if (value.startsWith("="))
             return false;
         return URL_PATTERN.matcher(value).find();
     }

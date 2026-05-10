@@ -85,20 +85,8 @@ public class FlogoFlow {
         this.metadata = metadata;
     }
 
-    public FlogoTask findTaskById(String taskId) {
-        return tasks.stream().filter(t -> taskId.equals(t.getId())).findFirst().orElse(null);
-    }
-
     public List<FlogoLink> getOutgoingLinks(String taskId) {
         return links.stream().filter(l -> taskId.equals(l.getFrom())).toList();
-    }
-
-    public List<FlogoLink> getIncomingLinks(String taskId) {
-        return links.stream().filter(l -> taskId.equals(l.getTo())).toList();
-    }
-
-    public boolean hasTaskWithRef(String ref) {
-        return tasks.stream().anyMatch(t -> t.getActivity() != null && ref.equals(t.getActivity().getRef()));
     }
 
     public Set<String> getReachableTaskIds() {

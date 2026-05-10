@@ -1,6 +1,5 @@
 package com.tibco.sonar.plugins.flogo.model;
 
-import com.google.gson.annotations.SerializedName;
 import java.util.*;
 
 public class FlogoApp {
@@ -134,5 +133,25 @@ public class FlogoApp {
 
     public int getTotalTriggerHandlerCount() {
         return triggers.stream().mapToInt(t -> t.getHandlers().size()).sum();
+    }
+
+    // Test metadata (populated by sensor from .flogotest file)
+    private transient Map<String, Map<String, Object>> testCases = new LinkedHashMap<>();
+    private transient Map<String, Map<String, Object>> testSuites = new LinkedHashMap<>();
+
+    public Map<String, Map<String, Object>> getTestCases() {
+        return testCases;
+    }
+
+    public void setTestCases(Map<String, Map<String, Object>> testCases) {
+        this.testCases = testCases;
+    }
+
+    public Map<String, Map<String, Object>> getTestSuites() {
+        return testSuites;
+    }
+
+    public void setTestSuites(Map<String, Map<String, Object>> testSuites) {
+        this.testSuites = testSuites;
     }
 }

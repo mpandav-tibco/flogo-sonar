@@ -33,14 +33,4 @@ public class UnusedPropertyCheck extends AbstractAppCheck {
             }
         }
     }
-
-    private int countOccurrences(String text, String search) {
-        int count = 0;
-        int idx = 0;
-        while ((idx = text.indexOf(search, idx)) != -1) {
-            count++;
-            idx += search.length();
-        }
-        return count;
-    }
 }

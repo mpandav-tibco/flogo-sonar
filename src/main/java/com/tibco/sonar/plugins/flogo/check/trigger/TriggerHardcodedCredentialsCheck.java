@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
 public class TriggerHardcodedCredentialsCheck extends AbstractTriggerCheck {
 
     private static final Pattern CREDENTIAL_KEY = Pattern.compile(
-            "(?i)(password|passwd|secret|apikey|api_key|token|credential|auth)",
+            "(password|passwd|secret|apikey|api_key|token|credential|auth)",
             Pattern.CASE_INSENSITIVE);
 
     @Override

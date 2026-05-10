@@ -41,8 +41,17 @@ public class MissingImportCheck extends AbstractAppCheck {
                     }
                 } else {
                     // Full ref — check against import paths
+                    // Extract the import path (after optional alias prefix)
                     boolean found = imports.stream()
-                            .anyMatch(imp -> imp.contains(ref) || ref.contains(imp));
+                            .anyMatch(imp -> {
+                                String importPath = imp.trim();
+                                int spaceIdx = importPath.indexOf(' ');
+                                if (spaceIdx > 0) {
+                                    importPath = importPath.substring(spaceIdx + 1).trim();
+                                }
+                                return importPath.equals(ref) || ref.endsWith("/" + importPath)
+                                        || importPath.endsWith("/" + ref);
+                            });
                     if (!found) {
                         addIssue(
                                 "Activity ref '" + ref + "' used in task '" + task.getId() + "' of flow '"

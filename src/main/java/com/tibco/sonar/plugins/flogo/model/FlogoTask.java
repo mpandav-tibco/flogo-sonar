@@ -57,14 +57,6 @@ public class FlogoTask {
         return activity != null && activity.getRef() != null && activity.getRef().contains("actreturn");
     }
 
-    public boolean isRestActivity() {
-        return activity != null && activity.getRef() != null && activity.getRef().toLowerCase().contains("rest");
-    }
-
-    public boolean isLogActivity() {
-        return activity != null && activity.getRef() != null && activity.getRef().toLowerCase().contains("log");
-    }
-
     public boolean hasRetryConfig() {
         if (settings == null || !settings.containsKey("retryOnError"))
             return false;

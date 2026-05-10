@@ -14,8 +14,6 @@ public class BrokenResolverReferenceCheck extends AbstractFlowCheck {
 
     // Matches $activity[TaskName].output.xxx or $activity[TaskName].xxx
     private static final Pattern ACTIVITY_REF = Pattern.compile("\\$activity\\[([^\\]]+)\\]");
-    // Matches $flow.xxx references for flow-level inputs
-    private static final Pattern FLOW_REF = Pattern.compile("\\$flow\\.([a-zA-Z_][a-zA-Z0-9_]*)");
 
     @Override
     protected void validateFlow(FlogoFlow flow, FlogoApp app) {
@@ -25,37 +23,26 @@ public class BrokenResolverReferenceCheck extends AbstractFlowCheck {
             taskIds.add(task.getId());
         }
 
-        // Build set of flow metadata input names
-        Set<String> flowInputs = new HashSet<>();
-        Map<String, Object> metadata = flow.getMetadata();
-        if (metadata != null) {
-            Object input = metadata.get("input");
-            if (input instanceof List) {
-                for (Object item : (List<?>) input) {
-                    if (item instanceof Map) {
-                        Object name = ((Map<?, ?>) item).get("name");
-                        if (name != null)
-                            flowInputs.add(name.toString());
-                    }
-                }
-            }
-        }
-
         // Check every task's input mappings for broken $activity[X] references
         for (FlogoTask task : flow.getTasks()) {
             if (task.getActivity() == null)
                 continue;
 
-            Map<String, Object> inputs = task.getActivity().getInput();
-            if (inputs == null)
+            checkMapForBrokenRefs(task.getActivity().getInput(), task, flow, app, taskIds);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void checkMapForBrokenRefs(Map<String, Object> map, FlogoTask task, FlogoFlow flow, FlogoApp app,
+            Set<String> taskIds) {
+        if (map == null)
+            return;
+
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+            if (entry.getValue() == null)
                 continue;
 
-            for (Map.Entry<String, Object> entry : inputs.entrySet()) {
-                if (entry.getValue() == null)
-                    continue;
-                String val = entry.getValue().toString();
-
-                // Check $activity[X] references
+            if (entry.getValue() instanceof String val) {
                 Matcher matcher = ACTIVITY_REF.matcher(val);
                 while (matcher.find()) {
                     String refId = matcher.group(1);
@@ -66,6 +53,8 @@ public class BrokenResolverReferenceCheck extends AbstractFlowCheck {
                                 taskLine(app, task.getId()));
                     }
                 }
+            } else if (entry.getValue() instanceof Map) {
+                checkMapForBrokenRefs((Map<String, Object>) entry.getValue(), task, flow, app, taskIds);
             }
         }
     }

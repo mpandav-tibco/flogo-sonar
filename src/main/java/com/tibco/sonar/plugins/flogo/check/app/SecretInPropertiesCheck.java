@@ -19,7 +19,10 @@ public class SecretInPropertiesCheck extends AbstractAppCheck {
         for (FlogoProperty prop : app.getProperties()) {
             if (SECRET_NAMES.matcher(prop.getName()).find()) {
                 String val = prop.getValueAsString();
-                if (!val.isEmpty() && !val.startsWith("SECRET:") && !val.startsWith("=$")) {
+                if (!val.isEmpty() && !val.startsWith("SECRET:")
+                        && !val.startsWith("=")
+                        && !val.startsWith("$property[")
+                        && !val.startsWith("$env[")) {
                     addIssue("Property '" + prop.getName()
                             + "' appears to contain a plaintext secret. Use encrypted secrets (SECRET:...) or environment variable references.",
                             FlogoParser.findLineNumber(app.getRawContent(), "\"name\": \"" + prop.getName() + "\""));

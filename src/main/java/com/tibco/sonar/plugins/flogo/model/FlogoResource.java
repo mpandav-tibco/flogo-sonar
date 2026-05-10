@@ -26,10 +26,4 @@ public class FlogoResource {
         return id != null && id.startsWith("flow:");
     }
 
-    public String getFlowName() {
-        if (isFlow()) {
-            return id.substring("flow:".length());
-        }
-        return id;
-    }
 }
